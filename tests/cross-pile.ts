@@ -24,16 +24,16 @@ describe('cross-pile', () => {
             await initiatorSession.requestAirdrop();
         });
 
-        it('creates a new initiator', async () => {
+        it('creates a new challenge', async () => {
             const wagerAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
             const wagerAmount = wagerAmountBigNumber.toNumber();
     
             await initiator.setChallengeAddress();
             await initiator.newChallenge(wagerAmountBigNumber);
     
-            let challengeData = await initiatorSession.fetchAccount(initiator.challengeAddress);
+            let challengeData = await program.account.challenge.fetch(initiator.challengeAddress);
     
-            expect(challengeData.initiator.toString(), "New initiator is owned by instantiating user.")
+            expect(challengeData.initiator.toString(), "New challenge is owned by instantiating user.")
                 .equals(initiatorSession.userKeypair.publicKey.toString());
             expect(challengeData.acceptor.toString(), "acceptor set to default public key.")
                 .equals(anchor.web3.PublicKey.default.toString());
@@ -62,7 +62,7 @@ describe('cross-pile', () => {
             // challenge created, now accept the challenge
             await acceptor.acceptChallenge(challengeAddress);
 
-            let challengeData = await initiatorSession.fetchAccount(challengeAddress);
+            let challengeData = await program.account.challenge.fetch(challengeAddress);
 
             console.log(challengeData);
             console.log(challengeAddress.toString());
@@ -74,4 +74,38 @@ describe('cross-pile', () => {
             expect(challengeData.wagerAmount.toNumber()).equals(wagerAmount);
         });
     });
+
+    // describe('reveal_winner', () => {
+    //     before(async () => {
+    //         initiatorSession = new Session(program, ENV);
+    //         initiator = new Initiator(initiatorSession);
+    //         acceptorSession = new Session(program, ENV);
+    //         acceptor = new Acceptor(acceptorSession);
+    //         await initiatorSession.requestAirdrop();
+    //         await acceptorSession.requestAirdrop();
+    //     });
+        
+    //     it('disburses funds to winner', async () => {
+    //         const wagerAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
+    //         const wagerAmount = wagerAmountBigNumber.toNumber();
+    
+    //         await initiator.setChallengeAddress();
+    //         let challengeAddress = initiator.challengeAddress;
+    //         await initiator.newChallenge(wagerAmountBigNumber);
+    
+    //         // challenge created, now accept the challenge
+    //         await acceptor.acceptChallenge(challengeAddress);
+
+    //         let challengeData = await program.account.challenge.fetch(challengeAddress);
+
+    //         console.log(challengeData);
+    //         console.log(challengeAddress.toString());
+    
+    //         expect(challengeData.initiator.toString(), "initiator owner remains instantiator.")
+    //             .equals(initiator.session.userKeypair.publicKey.toString());
+    //         expect(challengeData.acceptor.toString(), "acceptor now set to accepting user's public key.")
+    //             .equals(acceptor.session.userKeypair.publicKey.toString());
+    //         expect(challengeData.wagerAmount.toNumber()).equals(wagerAmount);
+    //     });
+    // });
 });

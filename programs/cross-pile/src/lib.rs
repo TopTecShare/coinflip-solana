@@ -3,28 +3,6 @@ use std::mem::size_of;
 
 declare_id!("2VqrmwwBWQ38zUbJENmEHQfY1LPJZBpuNauVMpZhqMdK");
 
-/**
- * The Cross And Pile Program (P2P Heads or Tails)
- * 
- * Accounts:
- * requester: PDA owned by the Solrand Program used to store data
- * oracle: The Oracle's account. Refer to Published Addreses.
- * oracle_vault: PDA owned by the Solrand Program for paying Oracle
- * solrand_program: The Program Address for the Solrand Program
- * coin: PDA owned by Cross & Pile used for storing data
- * vault: PDA owned by Cross & Pile used for escrowing sol and paying winner
- * initiator: The account creating the coin
- * acceptor: The account accepting the offer to flip
- * rent: The Rent Program
- * system_program: The System Program
- * 
- * Considerations:
- * 1. The CPI call to RequestRandom should happen only after or all funds are locked into the contract.
- * 2. Once a CPI call to RequestRandom is made, no funds should be allowed to be withdrawn.
- * 
- */
-
-
 #[program]
 pub mod cross_pile {
     use super::*;
@@ -43,12 +21,10 @@ pub mod cross_pile {
 
     pub fn accept_challenge(
         ctx: Context<AcceptChallenge>,
-        //acceptor_pub_key: Pubkey,
     ) -> ProgramResult {
         let challenge = &mut ctx.accounts.challenge;
 
         // should make sure no one has already accepted the challenge
-        //challenge.acceptor = acceptor_pub_key;
         challenge.acceptor = *ctx.accounts.acceptor.to_account_info().key;
         Ok(())
     }

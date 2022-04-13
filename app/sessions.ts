@@ -40,11 +40,6 @@ export class Session {
             "confirmed"
         );
     }
-
-    async fetchAccount(account: Address) {
-        let data = await this.program.account.challenge.fetch(account);
-        return data;
-    }
 }
 
 export class Initiator {
