@@ -9,19 +9,19 @@ pub mod cross_pile {
 
     pub fn new_challenge(
         ctx: Context<NewChallenge>,
-        user_bump: u8,
-        wager_amount: u64,
-    ) -> ProgramResult {
+        challenge_bump: u8,
+        wager_token_amount: u64,
+    ) -> Result<()> {
         let challenge = &mut ctx.accounts.challenge;
         challenge.initiator = *ctx.accounts.initiator.to_account_info().key;
-        challenge.wager_amount = wager_amount;
-        challenge.bump = user_bump;
+        challenge.wager_token_amount = wager_token_amount;
+        challenge.bump = challenge_bump;
         Ok(())
     }
 
     pub fn accept_challenge(
         ctx: Context<AcceptChallenge>,
-    ) -> ProgramResult {
+    ) -> Result<()> {
         let challenge = &mut ctx.accounts.challenge;
 
         // should make sure no one has already accepted the challenge
@@ -30,19 +30,21 @@ pub mod cross_pile {
     }
 }
 
+// PDA that holds the state of the challenge
 #[account]
 pub struct Challenge {
     pub initiator: Pubkey,
     pub acceptor: Pubkey,
-    pub wager_amount: u64,
+    pub wager_token_amount: u64,
     pub bump: u8,
 }
 
+// arguments list for new_challenge
 #[derive(Accounts)]
 pub struct NewChallenge<'info> {
     #[account(
         init,
-        payer= initiator,
+        payer=initiator,
         space=8+size_of::<Challenge>(),
         seeds=[b"challenge", initiator.to_account_info().key.as_ref()],
         bump

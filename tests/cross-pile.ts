@@ -25,11 +25,11 @@ describe('cross-pile', () => {
         });
 
         it('creates a new challenge', async () => {
-            const wagerAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
-            const wagerAmount = wagerAmountBigNumber.toNumber();
+            const wagerTokenAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
+            const wagerTokenAmount = wagerTokenAmountBigNumber.toNumber();
     
             await initiator.setChallengeAddress();
-            await initiator.newChallenge(wagerAmountBigNumber);
+            await initiator.newChallenge(wagerTokenAmountBigNumber);
     
             let challengeData = await program.account.challenge.fetch(initiator.challengeAddress);
     
@@ -37,7 +37,7 @@ describe('cross-pile', () => {
                 .equals(initiatorSession.userKeypair.publicKey.toString());
             expect(challengeData.acceptor.toString(), "acceptor set to default public key.")
                 .equals(anchor.web3.PublicKey.default.toString());
-            expect(challengeData.wagerAmount.toNumber()).equals(wagerAmount);
+            expect(challengeData.wagerTokenAmount.toNumber()).equals(wagerTokenAmount);
         });
     });
 
@@ -52,12 +52,12 @@ describe('cross-pile', () => {
         });
         
         it('accepts a challenge', async () => {
-            const wagerAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
-            const wagerAmount = wagerAmountBigNumber.toNumber();
+            const wagerTokenAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
+            const wagerTokenAmount = wagerTokenAmountBigNumber.toNumber();
     
             await initiator.setChallengeAddress();
             let challengeAddress = initiator.challengeAddress;
-            await initiator.newChallenge(wagerAmountBigNumber);
+            await initiator.newChallenge(wagerTokenAmountBigNumber);
     
             // challenge created, now accept the challenge
             await acceptor.acceptChallenge(challengeAddress);
@@ -71,7 +71,7 @@ describe('cross-pile', () => {
                 .equals(initiator.session.userKeypair.publicKey.toString());
             expect(challengeData.acceptor.toString(), "acceptor now set to accepting user's public key.")
                 .equals(acceptor.session.userKeypair.publicKey.toString());
-            expect(challengeData.wagerAmount.toNumber()).equals(wagerAmount);
+            expect(challengeData.wagerTokenAmount.toNumber()).equals(wagerTokenAmount);
         });
     });
 
@@ -86,12 +86,12 @@ describe('cross-pile', () => {
     //     });
         
     //     it('disburses funds to winner', async () => {
-    //         const wagerAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
-    //         const wagerAmount = wagerAmountBigNumber.toNumber();
+    //         const wagerTokenAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
+    //         const wagerTokenAmount = wagerTokenAmountBigNumber.toNumber();
     
     //         await initiator.setChallengeAddress();
     //         let challengeAddress = initiator.challengeAddress;
-    //         await initiator.newChallenge(wagerAmountBigNumber);
+    //         await initiator.newChallenge(wagerTokenAmountBigNumber);
     
     //         // challenge created, now accept the challenge
     //         await acceptor.acceptChallenge(challengeAddress);
@@ -105,7 +105,7 @@ describe('cross-pile', () => {
     //             .equals(initiator.session.userKeypair.publicKey.toString());
     //         expect(challengeData.acceptor.toString(), "acceptor now set to accepting user's public key.")
     //             .equals(acceptor.session.userKeypair.publicKey.toString());
-    //         expect(challengeData.wagerAmount.toNumber()).equals(wagerAmount);
+    //         expect(challengeData.wagerTokenAmount.toNumber()).equals(wagerTokenAmount);
     //     });
     // });
 });
