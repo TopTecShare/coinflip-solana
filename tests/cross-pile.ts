@@ -27,9 +27,11 @@ describe('cross-pile', () => {
         it('creates a new challenge', async () => {
             const wagerTokenAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
             const wagerTokenAmount = wagerTokenAmountBigNumber.toNumber();
-    
-            await initiator.setChallengeAddress();
+            await initiator.setUp();
+            console.log("made it here 1");
             await initiator.newChallenge(wagerTokenAmountBigNumber);
+
+            console.log("made it here 2");
     
             let challengeData = await program.account.challenge.fetch(initiator.challengeAddress);
     
@@ -55,7 +57,7 @@ describe('cross-pile', () => {
             const wagerTokenAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
             const wagerTokenAmount = wagerTokenAmountBigNumber.toNumber();
     
-            await initiator.setChallengeAddress();
+            await initiator.setUp();
             let challengeAddress = initiator.challengeAddress;
             await initiator.newChallenge(wagerTokenAmountBigNumber);
     

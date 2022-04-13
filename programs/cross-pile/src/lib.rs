@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use std::mem::size_of;
+use anchor_spl::token::{self, CloseAccount, Mint, SetAuthority, TokenAccount, Transfer};
 
 declare_id!("2VqrmwwBWQ38zUbJENmEHQfY1LPJZBpuNauVMpZhqMdK");
 
@@ -14,6 +15,7 @@ pub mod cross_pile {
     ) -> Result<()> {
         let challenge = &mut ctx.accounts.challenge;
         challenge.initiator = *ctx.accounts.initiator.to_account_info().key;
+        challenge.initiator_tokens_mint = *ctx.accounts.initiator_tokens_mint.to_account_info().key;
         challenge.wager_token_amount = wager_token_amount;
         challenge.bump = challenge_bump;
         Ok(())
@@ -34,6 +36,7 @@ pub mod cross_pile {
 #[account]
 pub struct Challenge {
     pub initiator: Pubkey,
+    pub initiator_tokens_mint: Pubkey,
     pub acceptor: Pubkey,
     pub wager_token_amount: u64,
     pub bump: u8,
@@ -50,6 +53,7 @@ pub struct NewChallenge<'info> {
         bump
     )]
     pub challenge: Account<'info, Challenge>,
+    pub initiator_tokens_mint: Account<'info, Mint>,
     #[account(mut)]
     pub initiator: Signer<'info>,
     pub system_program: Program<'info, System>,

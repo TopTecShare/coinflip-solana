@@ -1,6 +1,7 @@
-import { web3, Wallet, Provider, Program, setProvider, Idl, Address } from '@project-serum/anchor';
+import { web3, Wallet, Provider, Program, setProvider, Idl, } from '@project-serum/anchor';
 import { Keypair, PublicKey, Connection } from '@solana/web3.js';
 import { CrossPile } from '../target/types/cross_pile';
+import * as spl from '@solana/spl-token';
 
 export class Session {
     userKeypair: Keypair;
@@ -29,16 +30,18 @@ export class Session {
 
     async getBalance() {
         setProvider(this.provider);
-        return await this.provider.connection.getBalance(this.userKeypair.publicKey, "confirmed");
+        return await this.provider.connection.getBalance(this.userKeypair.publicKey, "finalized");
     }
 
-    async requestAirdrop(amount=1000000000) {
+    async requestAirdrop(amount=10_000_000_000) {
         setProvider(this.provider);
 
         await this.provider.connection.confirmTransaction(
             await this.provider.connection.requestAirdrop(this.userKeypair.publicKey, amount),
-            "confirmed"
+            "finalized"
         );
+
+        console.log(await this.provider.connection.getBalance(this.userKeypair.publicKey));
     }
 }
 
@@ -46,17 +49,32 @@ export class Initiator {
     session: Session;
     challengeAddress: PublicKey;
     challengeBump: any; // u8
+    mintAuthority: Keypair;
+    tokensMintPublickey: PublicKey;
 
     constructor(session: Session) {
         this.session = session;
     }
 
-    async setChallengeAddress() {
+    async setUp() {
         setProvider(this.session.provider);
+
         [this.challengeAddress, this.challengeBump] = await web3.PublicKey.findProgramAddress(
             [Buffer.from(this.session.seed), this.session.userKeypair.publicKey.toBuffer()],
-            this.session.programId
+            this.session.programId,
         );
+
+        this.mintAuthority = web3.Keypair.generate();
+
+        console.log("mint time boy");
+
+        this.tokensMintPublickey = await spl.createMint(
+            this.session.provider.connection,
+            this.session.userKeypair,
+            this.mintAuthority.publicKey,
+            null, // don't need a freeze authority for the example mint
+            9 // decimal places 9 TODO
+            );
     }
 
     /**
@@ -71,6 +89,7 @@ export class Initiator {
             {
                 accounts: {
                     challenge: this.challengeAddress,
+                    initiatorTokensMint: this.tokensMintPublickey,
                     initiator: this.session.userKeypair.publicKey,
                     systemProgram: web3.SystemProgram.programId,
                 }
