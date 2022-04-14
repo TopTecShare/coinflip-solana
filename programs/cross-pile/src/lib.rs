@@ -22,20 +22,33 @@ pub mod cross_pile {
         challenge.initiator_wager_token_amount = initiator_wager_token_amount;
         challenge.bump = challenge_bump;
 
-        // transfer wager_amount from initiator's token account to escrow account
-        let initiator_tokens_vault = &mut ctx.accounts.initiator_tokens_vault;
-        // let (vault_authority, _vault_authority_bump) =
-        //     Pubkey::find_program_address(&[ESCROW_PDA_SEED], ctx.program_id);
-        // token::set_authority(
-        //     ctx.accounts.into_set_authority_context(),
-        //     AuthorityType::AccountOwner,
-        //     Some(vault_authority),
-        // )?;
+        let mut initiator_tokens_vault = &mut ctx.accounts.initiator_tokens_vault;
 
-        // token::transfer(
-        //     ctx.accounts.into_transfer_to_pda_context(),
-        //     ctx.accounts.escrow_account.initializer_amount,
-        // )?;
+        // I don't fully understand this whole inner/outer nonsense to get the signer seeds to be arranged correctly
+        let bump_vector = initiator_tokens_vault_bump.to_le_bytes();
+        let inner = vec![
+            ctx.accounts.initiator.to_account_info().key.as_ref(),
+            ctx.accounts.initiator_tokens_mint.to_account_info().key.as_ref(),
+            b"initiator_tokens_vault".as_ref(),
+            bump_vector.as_ref(),
+        ];
+        let outer = vec![inner.as_slice()];
+
+        let transfer_from_initiator_source_to_vault_instruction = Transfer{
+            from: ctx.accounts.initiator_tokens_source.to_account_info(),
+            to: initiator_tokens_vault.to_account_info(),
+            authority: ctx.accounts.initiator.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            transfer_from_initiator_source_to_vault_instruction,
+            outer.as_slice(),
+        );
+
+        // The `?` at the end will cause the function to return early in case of an error.
+        // This pattern is common in Rust.
+        anchor_spl::token::transfer(cpi_ctx, initiator_wager_token_amount)?;
+
         Ok(())
     }
 

@@ -1,7 +1,7 @@
 import * as anchor from '@project-serum/anchor';
 import { Program } from '@project-serum/anchor';
 import { CrossPile } from '../target/types/cross_pile';
-import { Session, Initiator, Acceptor } from "../app/sessions";
+import { Session, Initiator, Acceptor, readAccount } from "../app/sessions";
 import { expect } from 'chai';
 
 describe('cross-pile', () => {
@@ -25,12 +25,17 @@ describe('cross-pile', () => {
         });
 
         it('creates a new challenge', async () => {
-            const wagerTokenAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
+            const wagerTokenAmountBigNumber = new anchor.BN(1000);
             const wagerTokenAmount = wagerTokenAmountBigNumber.toNumber();
             await initiator.setUp();
-            await initiator.newChallenge(wagerTokenAmountBigNumber);
+            await initiatorSession.provider.connection.confirmTransaction(
+                await initiator.newChallenge(wagerTokenAmountBigNumber),
+                'finalized')
+                ;
     
             let challengeData = await program.account.challenge.fetch(initiator.challengeAddress);
+            let [tokenSourceData, tokenSourceAmount] = await readAccount(initiator.initiatorTokensSource.address, initiatorSession.provider);
+            console.log(`tokenSource: ${initiator.initiatorTokensSource.address} now has ${tokenSourceAmount} tokens.`);
     
             expect(challengeData.initiator.toString(), "New challenge is owned by instantiating user.")
                 .equals(initiatorSession.userKeypair.publicKey.toString());
@@ -38,7 +43,7 @@ describe('cross-pile', () => {
                 .equals(initiator.tokensMintPublickey.toString());
             expect(challengeData.acceptor.toString(), "acceptor set to default public key.")
                 .equals(anchor.web3.PublicKey.default.toString());
-            expect(challengeData.initiatorWagerTokenAmount.toNumber(), "wagered amount matches what was passed in.")
+            expect(challengeData.initiatorWagerTokenAmount.toNumber(), "Wagered amount matches what was passed in.")
                 .equals(wagerTokenAmount);
             expect(challengeData.initiatorTokensVault.toString(), "Initiator escrow token wallet is set.")
                 .equals(initiator.initiatorTokensVaultAddress.toString());
@@ -56,7 +61,7 @@ describe('cross-pile', () => {
         });
         
         it('accepts a challenge', async () => {
-            const initiatorWagerTokenAmountBigNumber = new anchor.BN(10 * anchor.web3.LAMPORTS_PER_SOL);
+            const initiatorWagerTokenAmountBigNumber = new anchor.BN(1000);
             const initiatorWagerTokenAmount = initiatorWagerTokenAmountBigNumber.toNumber();
     
             await initiator.setUp();

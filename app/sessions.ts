@@ -103,16 +103,14 @@ export class Initiator {
             2000
           );
 
-        console.log(`Initiator tokens source (${this.initiatorTokensSource.address.toString()} created, and sent 2000 tokens)`);
+        let [_, amount] = await readAccount(this.initiatorTokensSource.address, this.session.provider);
+        console.log(`Initiator tokens source (${this.initiatorTokensSource.address.toString()} created, and has ${amount} tokens)`);
     }
 
-    /**
-     * @param {any} amount
-     */
-    async newChallenge(amount) {
+    async newChallenge(amount): Promise<string> {
         setProvider(this.session.provider);
 
-        await this.session.program.rpc.newChallenge(
+        return await this.session.program.rpc.newChallenge(
             this.challengeBump,
             this.initiatorTokensVaultBump,
             amount, 
@@ -155,4 +153,13 @@ export class Acceptor {
             }
         );
     }
+}
+
+export const readAccount = async (accountPublicKey: web3.PublicKey, provider: Provider): Promise<[spl.RawAccount, string]> => {
+    const tokenInfoLol = await provider.connection.getAccountInfo(accountPublicKey, 'finalized');
+    const data = Buffer.from(tokenInfoLol.data);
+    const accountInfo: spl.RawAccount = spl.AccountLayout.decode(data);
+
+    const amount = accountInfo.amount.toString();
+    return [accountInfo, amount.toString()];
 }
