@@ -23,14 +23,14 @@ export class Session {
         this.walletWrapper = new Wallet(this.userKeypair);
         this.provider = new Provider(this.solConnection, this.walletWrapper, {
             preflightCommitment: 'recent',
-            commitment: 'finalized'
+            commitment: 'confirmed'
         });
         this.program = new Program(program.idl, program.programId, this.provider);
     }
 
     async getBalance() {
         setProvider(this.provider);
-        return await this.provider.connection.getBalance(this.userKeypair.publicKey, "finalized");
+        return await this.provider.connection.getBalance(this.userKeypair.publicKey, 'processed');
     }
 
     async requestAirdrop(amount=10_000_000_000) {
@@ -38,10 +38,8 @@ export class Session {
 
         await this.provider.connection.confirmTransaction(
             await this.provider.connection.requestAirdrop(this.userKeypair.publicKey, amount),
-            "finalized"
+            'finalized'
         );
-
-        console.log(await this.provider.connection.getBalance(this.userKeypair.publicKey));
     }
 }
 
@@ -49,6 +47,9 @@ export class Initiator {
     session: Session;
     challengeAddress: PublicKey;
     challengeBump: any; // u8
+    initiatorEscrowWalletSeed: string = "initiator_escrow_wallet";
+    initiatorEscrowWalletAddress: PublicKey;
+    initiatorEscrowWalletBump: any; // u8
     mintAuthority: Keypair;
     tokensMintPublickey: PublicKey;
 
@@ -64,9 +65,12 @@ export class Initiator {
             this.session.programId,
         );
 
-        this.mintAuthority = web3.Keypair.generate();
+        [this.initiatorEscrowWalletAddress, this.initiatorEscrowWalletBump] = await web3.PublicKey.findProgramAddress(
+            [Buffer.from(this.initiatorEscrowWalletSeed), this.session.userKeypair.publicKey.toBuffer()],
+            this.session.programId,
+        );
 
-        console.log("mint time boy");
+        this.mintAuthority = web3.Keypair.generate();
 
         this.tokensMintPublickey = await spl.createMint(
             this.session.provider.connection,
@@ -84,14 +88,18 @@ export class Initiator {
         setProvider(this.session.provider);
 
         await this.session.program.rpc.newChallenge(
-            this.challengeBump, 
+            this.challengeBump,
+            this.initiatorEscrowWalletBump,
             amount, 
             {
                 accounts: {
                     challenge: this.challengeAddress,
+                    initiatorEscrowWallet: this.initiatorEscrowWalletAddress,
                     initiatorTokensMint: this.tokensMintPublickey,
                     initiator: this.session.userKeypair.publicKey,
                     systemProgram: web3.SystemProgram.programId,
+                    rent: web3.SYSVAR_RENT_PUBKEY,
+                    tokenProgram: spl.TOKEN_PROGRAM_ID,
                 }
             }
         );

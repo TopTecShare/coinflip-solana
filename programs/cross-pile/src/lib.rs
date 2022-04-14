@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use std::mem::size_of;
-use anchor_spl::token::{self, CloseAccount, Mint, SetAuthority, TokenAccount, Transfer};
+use anchor_spl::token::{self, CloseAccount, Mint, Token, SetAuthority, TokenAccount, Transfer};
 
 declare_id!("2VqrmwwBWQ38zUbJENmEHQfY1LPJZBpuNauVMpZhqMdK");
 
@@ -11,12 +11,14 @@ pub mod cross_pile {
     pub fn new_challenge(
         ctx: Context<NewChallenge>,
         challenge_bump: u8,
-        wager_token_amount: u64,
+        initiator_escrow_wallet_bump: u8,
+        initiator_wager_token_amount: u64,
     ) -> Result<()> {
         let challenge = &mut ctx.accounts.challenge;
         challenge.initiator = *ctx.accounts.initiator.to_account_info().key;
         challenge.initiator_tokens_mint = *ctx.accounts.initiator_tokens_mint.to_account_info().key;
-        challenge.wager_token_amount = wager_token_amount;
+        challenge.initiator_escrow_wallet = *ctx.accounts.initiator_escrow_wallet.to_account_info().key;
+        challenge.initiator_wager_token_amount = initiator_wager_token_amount;
         challenge.bump = challenge_bump;
         Ok(())
     }
@@ -38,25 +40,43 @@ pub struct Challenge {
     pub initiator: Pubkey,
     pub initiator_tokens_mint: Pubkey,
     pub acceptor: Pubkey,
-    pub wager_token_amount: u64,
+    pub initiator_escrow_wallet: Pubkey,
+    pub initiator_wager_token_amount: u64,
     pub bump: u8,
 }
 
 // arguments list for new_challenge
 #[derive(Accounts)]
 pub struct NewChallenge<'info> {
+    // PDAs
     #[account(
         init,
-        payer=initiator,
-        space=8+size_of::<Challenge>(),
-        seeds=[b"challenge", initiator.to_account_info().key.as_ref()],
+        payer = initiator,
+        space = 8 + size_of::<Challenge>(),
+        seeds = [b"challenge", initiator.to_account_info().key.as_ref()],
         bump
     )]
     pub challenge: Account<'info, Challenge>,
+    #[account(
+        init,
+        payer = initiator,
+        seeds = [b"initiator_escrow_wallet".as_ref(), initiator.to_account_info().key.as_ref()],
+        bump,
+        token::mint=initiator_tokens_mint,
+        token::authority=challenge,
+    )]
+    initiator_escrow_wallet: Account<'info, TokenAccount>,
+
+    // Mint of the wager that the person creating the challenge is putting up
     pub initiator_tokens_mint: Account<'info, Mint>,
+
     #[account(mut)]
     pub initiator: Signer<'info>,
+
+    // Application level accounts
     pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub rent: Sysvar<'info, Rent>
 }
 
 #[derive(Accounts)]
