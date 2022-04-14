@@ -47,9 +47,10 @@ export class Initiator {
     session: Session;
     challengeAddress: PublicKey;
     challengeBump: any; // u8
-    initiatorEscrowWalletSeed: string = "initiator_escrow_wallet";
-    initiatorEscrowWalletAddress: PublicKey;
-    initiatorEscrowWalletBump: any; // u8
+    initiatorTokensVaultSeed: string = "initiator_tokens_vault";
+    initiatorTokensVaultAddress: PublicKey;
+    initiatorTokensVaultBump: any; // u8
+    initiatorTokensSource: spl.Account;
     mintAuthority: Keypair;
     tokensMintPublickey: PublicKey;
 
@@ -65,10 +66,14 @@ export class Initiator {
             this.session.programId,
         );
 
-        [this.initiatorEscrowWalletAddress, this.initiatorEscrowWalletBump] = await web3.PublicKey.findProgramAddress(
-            [Buffer.from(this.initiatorEscrowWalletSeed), this.session.userKeypair.publicKey.toBuffer()],
+        console.log(`Challenge Address (${this.challengeAddress.toString()}) and Bump (${this.challengeBump}) created`);
+
+        [this.initiatorTokensVaultAddress, this.initiatorTokensVaultBump] = await web3.PublicKey.findProgramAddress(
+            [Buffer.from(this.initiatorTokensVaultSeed), this.session.userKeypair.publicKey.toBuffer()],
             this.session.programId,
         );
+
+        console.log(`Initiator Tokens Vault Address (${this.initiatorTokensVaultAddress.toString()}) and Bump (${this.initiatorTokensVaultBump}) created`);
 
         this.mintAuthority = web3.Keypair.generate();
 
@@ -79,6 +84,26 @@ export class Initiator {
             null, // don't need a freeze authority for the example mint
             9 // decimal places 9 TODO
             );
+        
+        console.log(`Initiator mint created (${this.tokensMintPublickey.toString()})`);
+
+        this.initiatorTokensSource = await spl.getOrCreateAssociatedTokenAccount(
+            this.session.provider.connection,
+            this.session.userKeypair,
+            this.tokensMintPublickey,
+            this.session.userKeypair.publicKey,
+        );
+
+        await spl.mintTo(
+            this.session.provider.connection,
+            this.session.userKeypair,
+            this.tokensMintPublickey,
+            this.initiatorTokensSource.address,
+            this.mintAuthority,
+            2000
+          );
+
+        console.log(`Initiator tokens source (${this.initiatorTokensSource.address.toString()} created, and sent 2000 tokens)`);
     }
 
     /**
@@ -89,14 +114,15 @@ export class Initiator {
 
         await this.session.program.rpc.newChallenge(
             this.challengeBump,
-            this.initiatorEscrowWalletBump,
+            this.initiatorTokensVaultBump,
             amount, 
             {
                 accounts: {
                     challenge: this.challengeAddress,
-                    initiatorEscrowWallet: this.initiatorEscrowWalletAddress,
+                    initiatorTokensVault: this.initiatorTokensVaultAddress,
                     initiatorTokensMint: this.tokensMintPublickey,
                     initiator: this.session.userKeypair.publicKey,
+                    initiatorTokensSource: this.initiatorTokensSource.address,
                     systemProgram: web3.SystemProgram.programId,
                     rent: web3.SYSVAR_RENT_PUBKEY,
                     tokenProgram: spl.TOKEN_PROGRAM_ID,

@@ -11,15 +11,31 @@ pub mod cross_pile {
     pub fn new_challenge(
         ctx: Context<NewChallenge>,
         challenge_bump: u8,
-        initiator_escrow_wallet_bump: u8,
+        initiator_tokens_vault_bump: u8,
         initiator_wager_token_amount: u64,
     ) -> Result<()> {
+        // initialize the challenge with information provided by the initiator
         let challenge = &mut ctx.accounts.challenge;
         challenge.initiator = *ctx.accounts.initiator.to_account_info().key;
         challenge.initiator_tokens_mint = *ctx.accounts.initiator_tokens_mint.to_account_info().key;
-        challenge.initiator_escrow_wallet = *ctx.accounts.initiator_escrow_wallet.to_account_info().key;
+        challenge.initiator_tokens_vault = *ctx.accounts.initiator_tokens_vault.to_account_info().key;
         challenge.initiator_wager_token_amount = initiator_wager_token_amount;
         challenge.bump = challenge_bump;
+
+        // transfer wager_amount from initiator's token account to escrow account
+        let initiator_tokens_vault = &mut ctx.accounts.initiator_tokens_vault;
+        // let (vault_authority, _vault_authority_bump) =
+        //     Pubkey::find_program_address(&[ESCROW_PDA_SEED], ctx.program_id);
+        // token::set_authority(
+        //     ctx.accounts.into_set_authority_context(),
+        //     AuthorityType::AccountOwner,
+        //     Some(vault_authority),
+        // )?;
+
+        // token::transfer(
+        //     ctx.accounts.into_transfer_to_pda_context(),
+        //     ctx.accounts.escrow_account.initializer_amount,
+        // )?;
         Ok(())
     }
 
@@ -39,9 +55,9 @@ pub mod cross_pile {
 pub struct Challenge {
     pub initiator: Pubkey,
     pub initiator_tokens_mint: Pubkey,
-    pub acceptor: Pubkey,
-    pub initiator_escrow_wallet: Pubkey,
+    pub initiator_tokens_vault: Pubkey,
     pub initiator_wager_token_amount: u64,
+    pub acceptor: Pubkey,
     pub bump: u8,
 }
 
@@ -57,19 +73,24 @@ pub struct NewChallenge<'info> {
         bump
     )]
     pub challenge: Account<'info, Challenge>,
+
+    // account to transfer initiator's wager tokens to
     #[account(
         init,
         payer = initiator,
-        seeds = [b"initiator_escrow_wallet".as_ref(), initiator.to_account_info().key.as_ref()],
+        seeds = [b"initiator_tokens_vault".as_ref(), initiator.to_account_info().key.as_ref()],
         bump,
         token::mint=initiator_tokens_mint,
         token::authority=challenge,
     )]
-    initiator_escrow_wallet: Account<'info, TokenAccount>,
+    initiator_tokens_vault: Account<'info, TokenAccount>,
 
     // Mint of the wager that the person creating the challenge is putting up
     pub initiator_tokens_mint: Account<'info, Mint>,
 
+    // Where to withdraw the intiator's wager tokens from
+    #[account(mut)]
+    pub initiator_tokens_source: Account<'info, TokenAccount>,
     #[account(mut)]
     pub initiator: Signer<'info>,
 

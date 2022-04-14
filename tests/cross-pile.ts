@@ -40,9 +40,8 @@ describe('cross-pile', () => {
                 .equals(anchor.web3.PublicKey.default.toString());
             expect(challengeData.initiatorWagerTokenAmount.toNumber(), "wagered amount matches what was passed in.")
                 .equals(wagerTokenAmount);
-            expect(challengeData.initiatorEscrowWallet.toString(), "Initiator escrow token wallet is set.")
-                .equals(initiator.initiatorEscrowWalletAddress.toString());
-            // test that init escrow wallet is set here
+            expect(challengeData.initiatorTokensVault.toString(), "Initiator escrow token wallet is set.")
+                .equals(initiator.initiatorTokensVaultAddress.toString());
         });
     });
 
