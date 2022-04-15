@@ -1,4 +1,4 @@
-import { web3, Wallet, Provider, Program, setProvider, Idl, } from '@project-serum/anchor';
+import { web3, Wallet, Provider, Program, setProvider, Idl, BN, AnchorProvider, } from '@project-serum/anchor';
 import { Keypair, PublicKey, Connection } from '@solana/web3.js';
 import { CrossPile } from '../target/types/cross_pile';
 import * as spl from '@solana/spl-token';
@@ -21,7 +21,7 @@ export class Session {
 
         this.solConnection = new web3.Connection(env);
         this.walletWrapper = new Wallet(this.userKeypair);
-        this.provider = new Provider(this.solConnection, this.walletWrapper, {
+        this.provider = new AnchorProvider(this.solConnection, this.walletWrapper, {
             preflightCommitment: 'recent',
             commitment: 'confirmed'
         });
@@ -58,7 +58,7 @@ export class Initiator {
         this.session = session;
     }
 
-    async setUp() {
+    async setUp(initiatorTokenFundAmount: number) {
         setProvider(this.session.provider);
 
         [this.challengeAddress, this.challengeBump] = await web3.PublicKey.findProgramAddress(
@@ -82,7 +82,9 @@ export class Initiator {
             this.session.userKeypair,
             this.mintAuthority.publicKey,
             null, // don't need a freeze authority for the example mint
-            9 // decimal places 9 TODO
+            9, // decimal places 9 TODO
+            web3.Keypair.generate(),
+            {commitment: 'finalized'}
             );
         
         console.log(`Initiator mint created (${this.tokensMintPublickey.toString()})`);
@@ -94,23 +96,56 @@ export class Initiator {
             this.session.userKeypair.publicKey,
         );
 
-        await spl.mintTo(
+        const mintTx = await spl.mintTo(
             this.session.provider.connection,
             this.session.userKeypair,
             this.tokensMintPublickey,
             this.initiatorTokensSource.address,
             this.mintAuthority,
-            2000
-          );
+            initiatorTokenFundAmount
+        );
+        
+        // await this.session.provider.connection.confirmTransaction(
+        //     mintTx,
+        //     'finalized'
+        // );
 
         let [_, amount] = await readAccount(this.initiatorTokensSource.address, this.session.provider);
         console.log(`Initiator tokens source (${this.initiatorTokensSource.address.toString()} created, and has ${amount} tokens)`);
+        console.log('-------------------------------------');
+        console.table([
+            {address: "challenge: " + this.challengeAddress, bump: "challenge: " + this.challengeBump},
+            {address: "initiator tokens vault: " + this.initiatorTokensVaultAddress, bump: "initiator tokens vault: " + this.initiatorTokensVaultBump}
+        ])
+        console.log('-------------------------------------');
     }
 
-    async newChallenge(amount): Promise<string> {
-        setProvider(this.session.provider);
+    // async newChallenge(amount: BN) {
+    //     setProvider(this.session.provider);
 
-        return await this.session.program.rpc.newChallenge(
+    //     return await this.session.program.methods.newChallenge(
+    //         this.challengeBump,
+    //         this.initiatorTokensVaultBump,
+    //         amount
+    //         )
+    //         .accounts({
+    //             challenge: this.challengeAddress,
+    //             initiatorTokensVault: this.initiatorTokensVaultAddress,
+    //             initiatorTokensMint: this.tokensMintPublickey,
+    //             initiator: this.session.userKeypair.publicKey,
+    //             initiatorTokensSource: this.initiatorTokensSource.address,
+    //             systemProgram: web3.SystemProgram.programId,
+    //             rent: web3.SYSVAR_RENT_PUBKEY,
+    //             tokenProgram: spl.TOKEN_PROGRAM_ID,
+    //         })
+    //         .rpc();
+    // }
+
+    async newChallenge(amount: BN) {
+        setProvider(this.session.provider);
+        
+        console.log("" + this.challengeBump + "" + this.initiatorTokensVaultBump);
+        await this.session.program.rpc.newChallenge(
             this.challengeBump,
             this.initiatorTokensVaultBump,
             amount, 
@@ -156,7 +191,7 @@ export class Acceptor {
 }
 
 export const readAccount = async (accountPublicKey: web3.PublicKey, provider: Provider): Promise<[spl.RawAccount, string]> => {
-    const tokenInfoLol = await provider.connection.getAccountInfo(accountPublicKey, 'finalized');
+    const tokenInfoLol = await provider.connection.getAccountInfo(accountPublicKey);
     const data = Buffer.from(tokenInfoLol.data);
     const accountInfo: spl.RawAccount = spl.AccountLayout.decode(data);
 

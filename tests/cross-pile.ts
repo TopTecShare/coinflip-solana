@@ -25,18 +25,18 @@ describe('cross-pile', () => {
         });
 
         it('creates a new challenge', async () => {
-            const wagerTokenAmountBigNumber = new anchor.BN(1000);
-            const wagerTokenAmount = wagerTokenAmountBigNumber.toNumber();
-            await initiator.setUp();
-            await initiatorSession.provider.connection.confirmTransaction(
-                await initiator.newChallenge(wagerTokenAmountBigNumber),
-                'finalized')
-                ;
+            const initialTokenFundAmount = 2000;
+            const wagerTokensAmount = 1000;
+            const wagerTokensAmountBigNumber = new anchor.BN(wagerTokensAmount);
+
+            await initiator.setUp(initialTokenFundAmount);
+
+            await initiator.newChallenge(wagerTokensAmountBigNumber);
     
             let challengeData = await program.account.challenge.fetch(initiator.challengeAddress);
-            let [tokenSourceData, tokenSourceAmount] = await readAccount(initiator.initiatorTokensSource.address, initiatorSession.provider);
+            let [, tokenSourceAmount] = await readAccount(initiator.initiatorTokensSource.address, initiatorSession.provider);
             console.log(`tokenSource: ${initiator.initiatorTokensSource.address} now has ${tokenSourceAmount} tokens.`);
-    
+
             expect(challengeData.initiator.toString(), "New challenge is owned by instantiating user.")
                 .equals(initiatorSession.userKeypair.publicKey.toString());
             expect(challengeData.initiatorTokensMint.toString(), "New challenge wager amount tokens matches expected.")
@@ -44,45 +44,49 @@ describe('cross-pile', () => {
             expect(challengeData.acceptor.toString(), "acceptor set to default public key.")
                 .equals(anchor.web3.PublicKey.default.toString());
             expect(challengeData.initiatorWagerTokenAmount.toNumber(), "Wagered amount matches what was passed in.")
-                .equals(wagerTokenAmount);
+                .equals(wagerTokensAmount);
             expect(challengeData.initiatorTokensVault.toString(), "Initiator escrow token wallet is set.")
                 .equals(initiator.initiatorTokensVaultAddress.toString());
+            expect(tokenSourceAmount)
+                .equals(`${initialTokenFundAmount - wagerTokensAmount}`);
+            // expect(initiatorTokenVaultAmount)
+            //     .equals(wagerTokensAmount.toString());
         });
     });
 
-    describe('accept_challenge', () => {
-        before(async () => {
-            initiatorSession = new Session(program, ENV);
-            initiator = new Initiator(initiatorSession);
-            acceptorSession = new Session(program, ENV);
-            acceptor = new Acceptor(acceptorSession);
-            await initiatorSession.requestAirdrop();
-            await acceptorSession.requestAirdrop();
-        });
+    // describe('accept_challenge', () => {
+    //     before(async () => {
+    //         initiatorSession = new Session(program, ENV);
+    //         initiator = new Initiator(initiatorSession);
+    //         acceptorSession = new Session(program, ENV);
+    //         acceptor = new Acceptor(acceptorSession);
+    //         await initiatorSession.requestAirdrop();
+    //         await acceptorSession.requestAirdrop();
+    //     });
         
-        it('accepts a challenge', async () => {
-            const initiatorWagerTokenAmountBigNumber = new anchor.BN(1000);
-            const initiatorWagerTokenAmount = initiatorWagerTokenAmountBigNumber.toNumber();
+    //     it('accepts a challenge', async () => {
+    //         const initiatorWagerTokenAmountBigNumber = new anchor.BN(1000);
+    //         const initiatorWagerTokenAmount = initiatorWagerTokenAmountBigNumber.toNumber();
     
-            await initiator.setUp();
-            let challengeAddress = initiator.challengeAddress;
-            await initiator.newChallenge(initiatorWagerTokenAmountBigNumber);
+    //         await initiator.setUp();
+    //         let challengeAddress = initiator.challengeAddress;
+    //         await initiator.newChallenge(initiatorWagerTokenAmountBigNumber);
     
-            // challenge created, now accept the challenge
-            await acceptor.acceptChallenge(challengeAddress);
+    //         // challenge created, now accept the challenge
+    //         await acceptor.acceptChallenge(challengeAddress);
 
-            let challengeData = await program.account.challenge.fetch(challengeAddress);
+    //         let challengeData = await program.account.challenge.fetch(challengeAddress);
 
-            console.log(challengeData);
-            console.log(challengeAddress.toString());
+    //         console.log(challengeData);
+    //         console.log(challengeAddress.toString());
     
-            expect(challengeData.initiator.toString(), "initiator owner remains instantiator.")
-                .equals(initiator.session.userKeypair.publicKey.toString());
-            expect(challengeData.acceptor.toString(), "acceptor now set to accepting user's public key.")
-                .equals(acceptor.session.userKeypair.publicKey.toString());
-            expect(challengeData.initiatorWagerTokenAmount.toNumber()).equals(initiatorWagerTokenAmount);
-        });
-    });
+    //         expect(challengeData.initiator.toString(), "initiator owner remains instantiator.")
+    //             .equals(initiator.session.userKeypair.publicKey.toString());
+    //         expect(challengeData.acceptor.toString(), "acceptor now set to accepting user's public key.")
+    //             .equals(acceptor.session.userKeypair.publicKey.toString());
+    //         expect(challengeData.initiatorWagerTokenAmount.toNumber()).equals(initiatorWagerTokenAmount);
+    //     });
+    // });
 
     // describe('reveal_winner', () => {
     //     before(async () => {

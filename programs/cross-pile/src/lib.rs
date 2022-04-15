@@ -1,12 +1,15 @@
 use anchor_lang::prelude::*;
 use std::mem::size_of;
 use anchor_spl::token::{self, CloseAccount, Mint, Token, SetAuthority, TokenAccount, Transfer};
+use spl_token::instruction::AuthorityType;
 
 declare_id!("2VqrmwwBWQ38zUbJENmEHQfY1LPJZBpuNauVMpZhqMdK");
 
 #[program]
 pub mod cross_pile {
     use super::*;
+
+    const ESCROW_PDA_SEED: &[u8] = b"escrow";
 
     pub fn new_challenge(
         ctx: Context<NewChallenge>,
@@ -16,38 +19,49 @@ pub mod cross_pile {
     ) -> Result<()> {
         // initialize the challenge with information provided by the initiator
         let challenge = &mut ctx.accounts.challenge;
-        challenge.initiator = *ctx.accounts.initiator.to_account_info().key;
-        challenge.initiator_tokens_mint = *ctx.accounts.initiator_tokens_mint.to_account_info().key;
-        challenge.initiator_tokens_vault = *ctx.accounts.initiator_tokens_vault.to_account_info().key;
+        challenge.initiator = ctx.accounts.initiator.to_account_info().key.clone();
+        challenge.initiator_tokens_mint = ctx.accounts.initiator_tokens_mint.to_account_info().key.clone();
+        challenge.initiator_tokens_vault = ctx.accounts.initiator_tokens_vault.to_account_info().key.clone();
         challenge.initiator_wager_token_amount = initiator_wager_token_amount;
         challenge.bump = challenge_bump;
 
-        let mut initiator_tokens_vault = &mut ctx.accounts.initiator_tokens_vault;
+        let initiator_tokens_vault = &mut ctx.accounts.initiator_tokens_vault;
 
         // I don't fully understand this whole inner/outer nonsense to get the signer seeds to be arranged correctly
-        let bump_vector = initiator_tokens_vault_bump.to_le_bytes();
-        let inner = vec![
-            ctx.accounts.initiator.to_account_info().key.as_ref(),
-            ctx.accounts.initiator_tokens_mint.to_account_info().key.as_ref(),
-            b"initiator_tokens_vault".as_ref(),
-            bump_vector.as_ref(),
-        ];
-        let outer = vec![inner.as_slice()];
-
-        let transfer_from_initiator_source_to_vault_instruction = Transfer{
-            from: ctx.accounts.initiator_tokens_source.to_account_info(),
-            to: initiator_tokens_vault.to_account_info(),
-            authority: ctx.accounts.initiator.to_account_info(),
-        };
-        let cpi_ctx = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            transfer_from_initiator_source_to_vault_instruction,
-            outer.as_slice(),
-        );
+        // let bump_vector = challenge_bump.to_le_bytes();
+        // let inner = vec![
+        //     ctx.accounts.initiator_tokens_mint.to_account_info().key.as_ref(),
+        //     ctx.accounts.initiator.to_account_info().key.as_ref(),
+        //     // b"challenge".as_ref(),
+        //     // bump_vector.as_ref(),
+        // ];
+        // let outer = vec![inner.as_slice()];
+        
+        // let transfer_from_initiator_source_to_vault_instruction = Transfer{
+        //     from: ctx.accounts.initiator_tokens_source.to_account_info(),
+        //     to: initiator_tokens_vault.to_account_info(),
+        //     authority: ctx.accounts.initiator.to_account_info(),
+        // };
+        // let cpi_ctx = CpiContext::new_with_signer(
+        //     ctx.accounts.token_program.to_account_info(),
+        //     transfer_from_initiator_source_to_vault_instruction,
+        //     outer.as_slice(),
+        // );
 
         // The `?` at the end will cause the function to return early in case of an error.
         // This pattern is common in Rust.
-        anchor_spl::token::transfer(cpi_ctx, initiator_wager_token_amount)?;
+        // anchor_spl::token::transfer(cpi_ctx, initiator_wager_token_amount)?;
+
+        let (pda, _bump_seed) = Pubkey::find_program_address(&[ESCROW_PDA_SEED], ctx.program_id);
+        let seeds = &[&ESCROW_PDA_SEED[..], &[bump_seed]];
+        token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
+
+        token::transfer(
+            ctx.accounts
+                .into_transfer_to_taker_context()
+                .with_signer(&[&seeds[..]]),
+                initiator_wager_token_amount,
+        )?;
 
         Ok(())
     }
@@ -77,6 +91,9 @@ pub struct Challenge {
 // arguments list for new_challenge
 #[derive(Accounts)]
 pub struct NewChallenge<'info> {
+    #[account(mut)]
+    pub initiator: Signer<'info>,
+
     // PDAs
     #[account(
         init,
@@ -104,13 +121,12 @@ pub struct NewChallenge<'info> {
     // Where to withdraw the intiator's wager tokens from
     #[account(mut)]
     pub initiator_tokens_source: Account<'info, TokenAccount>,
-    #[account(mut)]
-    pub initiator: Signer<'info>,
+    
 
     // Application level accounts
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
-    pub rent: Sysvar<'info, Rent>
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
@@ -122,6 +138,34 @@ pub struct AcceptChallenge<'info> {
     // pub initiator: AccountInfo<'info>,
     pub acceptor: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+impl<'info> From<&mut NewChallenge<'info>>
+    for CpiContext<'_, '_, '_, 'info, SetAuthority<'info>>
+{
+    fn from(accounts: &mut NewChallenge<'info>) -> Self {
+        let cpi_accounts = SetAuthority {
+            account_or_mint: accounts
+                .initiator_tokens_source
+                .to_account_info()
+                .clone(),
+            current_authority: accounts.initiator.to_account_info().clone(),
+        };
+        let cpi_program = accounts.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+
+impl<'info> NewChallenge<'info> {
+    fn into_transfer_to_taker_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
+        let cpi_accounts = Transfer {
+            from: self.pda_deposit_token_account.to_account_info().clone(),
+            to: self.taker_receive_token_account.to_account_info().clone(),
+            authority: self.pda_account.clone(),
+        };
+        let cpi_program = self.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
 }
 
 // #[error]
