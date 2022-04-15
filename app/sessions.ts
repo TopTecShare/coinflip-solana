@@ -138,53 +138,87 @@ export class Initiator {
             })
             .rpc();
     }
-
-    // async newChallenge(amount: BN) {
-    //     setProvider(this.session.provider);
-        
-    //     console.log("" + this.challengeBump + "" + this.initiatorTokensVaultBump);
-    //     await this.session.program.rpc.newChallenge(
-    //         this.challengeBump,
-    //         this.initiatorTokensVaultBump,
-    //         amount, 
-    //         {
-    //             accounts: {
-    //                 challenge: this.challengeAddress,
-    //                 initiatorTokensVault: this.initiatorTokensVaultAddress,
-    //                 initiatorTokensMint: this.tokensMintPublickey,
-    //                 initiator: this.session.userKeypair.publicKey,
-    //                 initiatorTokensSource: this.initiatorTokensSource.address,
-    //                 systemProgram: web3.SystemProgram.programId,
-    //                 rent: web3.SYSVAR_RENT_PUBKEY,
-    //                 tokenProgram: spl.TOKEN_PROGRAM_ID,
-    //             }
-    //         }
-    //     );
-    // }
  }
 
 export class Acceptor {
     session: Session;
+    acceptorTokensVaultAddress: PublicKey;
+    acceptorTokensVaultBump: any; // u8
+    initiatorTokensVaultSeed: string = "acceptor_tokens_vault";
+    mintAuthority: Keypair;
+    tokensMintPublickey: PublicKey;
+    acceptorTokensSource: spl.Account;
 
     constructor(session: Session) {
         this.session = session;
     }
 
+    async setUp(acceptorTokenFundAmount: number) {
+        setProvider(this.session.provider);
+
+        [this.acceptorTokensVaultAddress, this.acceptorTokensVaultBump] = await web3.PublicKey.findProgramAddress(
+            [Buffer.from(this.initiatorTokensVaultSeed), this.session.userKeypair.publicKey.toBuffer()],
+            this.session.programId,
+        );
+
+        console.log(`Acceptor Tokens Vault Address (${this.acceptorTokensVaultAddress.toString()}) and Bump`
+          + `(${this.acceptorTokensVaultBump}) created`);
+
+        this.mintAuthority = web3.Keypair.generate();
+
+        this.tokensMintPublickey = await spl.createMint(
+            this.session.provider.connection,
+            this.session.userKeypair,
+            this.mintAuthority.publicKey,
+            null, // don't need a freeze authority for the example mint
+            9, // decimal places 9 TODO
+            web3.Keypair.generate(),
+            {commitment: 'finalized'}
+            );
+        
+        console.log(`Initiator mint created (${this.tokensMintPublickey.toString()})`);
+
+        this.acceptorTokensSource = await spl.getOrCreateAssociatedTokenAccount(
+            this.session.provider.connection,
+            this.session.userKeypair,
+            this.tokensMintPublickey,
+            this.session.userKeypair.publicKey,
+        );
+
+        const mintTx = await spl.mintTo(
+            this.session.provider.connection,
+            this.session.userKeypair,
+            this.tokensMintPublickey,
+            this.acceptorTokensSource.address,
+            this.mintAuthority,
+            acceptorTokenFundAmount
+        );
+
+        let [_, amount] = await readTokenAccount(this.acceptorTokensSource.address, this.session.provider);
+        console.log(`Acceptor tokens source (${this.acceptorTokensSource.address.toString()} created, and has ${amount} tokens)`);
+    }
+
     /**
      * @param {any} challenge
      */
-    async acceptChallenge(challengeAddress) {
+    async acceptChallenge(challengeAddress, wagerTokenAmount: BN): Promise<string> {
         setProvider(this.session.provider);
 
-        await this.session.program.rpc.acceptChallenge(
-            {
-                accounts: {
-                    challenge: challengeAddress,
-                    acceptor: this.session.userKeypair.publicKey,
-                    systemProgram: web3.SystemProgram.programId,
-                }
-            }
-        );
+        return await this.session.program.methods.acceptChallenge(
+            this.acceptorTokensVaultBump,
+            wagerTokenAmount
+        )
+        .accounts({
+            acceptor: this.session.userKeypair.publicKey,
+            challenge: challengeAddress,
+            acceptorTokensVault: this.acceptorTokensVaultAddress,
+            acceptorTokensMint: this.tokensMintPublickey,
+            acceptorTokensSource: this.acceptorTokensSource.address,
+            systemProgram: web3.SystemProgram.programId,
+            tokenProgram: spl.TOKEN_PROGRAM_ID,
+            rent: web3.SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
     }
 }
 

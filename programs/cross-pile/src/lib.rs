@@ -9,8 +9,6 @@ declare_id!("2VqrmwwBWQ38zUbJENmEHQfY1LPJZBpuNauVMpZhqMdK");
 pub mod cross_pile {
     use super::*;
 
-    const ESCROW_PDA_SEED: &[u8] = b"escrow";
-
     pub fn new_challenge(
         ctx: Context<NewChallenge>,
         challenge_bump: u8,
@@ -25,6 +23,7 @@ pub mod cross_pile {
         challenge.initiator_wager_token_amount = initiator_wager_token_amount;
         challenge.bump = challenge_bump;
 
+        // move the tokens in the wager from the initiator's token source to the token vault
         let initiator_tokens_vault = &mut ctx.accounts.initiator_tokens_vault;
 
         anchor_spl::token::transfer(
@@ -45,52 +44,42 @@ pub mod cross_pile {
             initiator_wager_token_amount,
         )?;
 
-        // I don't fully understand this whole inner/outer nonsense to get the signer seeds to be arranged correctly
-        // let bump_vector = challenge_bump.to_le_bytes();
-        // let inner = vec![
-        //     ctx.accounts.initiator_tokens_mint.to_account_info().key.as_ref(),
-        //     ctx.accounts.initiator.to_account_info().key.as_ref(),
-        //     // b"challenge".as_ref(),
-        //     // bump_vector.as_ref(),
-        // ];
-        // let outer = vec![inner.as_slice()];
-        
-        // let transfer_from_initiator_source_to_vault_instruction = Transfer{
-        //     from: ctx.accounts.initiator_tokens_source.to_account_info(),
-        //     to: initiator_tokens_vault.to_account_info(),
-        //     authority: ctx.accounts.initiator.to_account_info(),
-        // };
-        // let cpi_ctx = CpiContext::new_with_signer(
-        //     ctx.accounts.token_program.to_account_info(),
-        //     transfer_from_initiator_source_to_vault_instruction,
-        //     outer.as_slice(),
-        // );
-
-        // The `?` at the end will cause the function to return early in case of an error.
-        // This pattern is common in Rust.
-        // anchor_spl::token::transfer(cpi_ctx, initiator_wager_token_amount)?;
-
-        // let (pda, _bump_seed) = Pubkey::find_program_address(&[ESCROW_PDA_SEED], ctx.program_id);
-        // let seeds = &[&ESCROW_PDA_SEED[..], &[_bump_seed]];
-        // token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
-
-        // token::transfer(
-        //     ctx.accounts
-        //         .into_transfer_to_taker_context()
-        //         .with_signer(&[&seeds[..]]),
-        //         initiator_wager_token_amount,
-        // )?;
-
         Ok(())
     }
 
     pub fn accept_challenge(
         ctx: Context<AcceptChallenge>,
+        acceptor_tokens_vault_bump: u8,
+        acceptor_wager_token_amount: u64,
     ) -> Result<()> {
         let challenge = &mut ctx.accounts.challenge;
-
         // should make sure no one has already accepted the challenge
         challenge.acceptor = *ctx.accounts.acceptor.to_account_info().key;
+        challenge.acceptor_tokens_mint = ctx.accounts.acceptor_tokens_mint.to_account_info().key.clone();
+        challenge.acceptor_tokens_vault = ctx.accounts.acceptor_tokens_vault.to_account_info().key.clone();
+        challenge.acceptor_wager_token_amount = acceptor_wager_token_amount;
+
+        // move the tokens in the wager from the acceptor's token source to the token vault
+        let acceptor_tokens_vault = &mut ctx.accounts.acceptor_tokens_vault;
+
+        anchor_spl::token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::Transfer {
+                    from: ctx
+                        .accounts
+                        .acceptor_tokens_source
+                        .to_account_info(),
+                    to: ctx
+                        .accounts
+                        .acceptor_tokens_vault
+                        .to_account_info(),
+                    authority: ctx.accounts.acceptor.to_account_info(),
+                },
+            ),
+            acceptor_wager_token_amount,
+        )?;
+
         Ok(())
     }
 }
@@ -103,6 +92,9 @@ pub struct Challenge {
     pub initiator_tokens_vault: Pubkey,
     pub initiator_wager_token_amount: u64,
     pub acceptor: Pubkey,
+    pub acceptor_tokens_mint: Pubkey,
+    pub acceptor_tokens_vault: Pubkey,
+    pub acceptor_wager_token_amount: u64,
     pub bump: u8,
 }
 
@@ -140,7 +132,6 @@ pub struct NewChallenge<'info> {
     #[account(mut)]
     pub initiator_tokens_source: Account<'info, TokenAccount>,
     
-
     // Application level accounts
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -150,28 +141,32 @@ pub struct NewChallenge<'info> {
 #[derive(Accounts)]
 pub struct AcceptChallenge<'info> {
     #[account(mut)]
-    pub challenge: Account<'info, Challenge>,
-    //pub acceptor_pub_key: Pubkey,
-    // /// CHECK: Unsafe for some reason
-    // pub initiator: AccountInfo<'info>,
     pub acceptor: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
+    #[account(mut)]
+    pub challenge: Account<'info, Challenge>,
 
-impl<'info> From<&mut NewChallenge<'info>>
-    for CpiContext<'_, '_, '_, 'info, SetAuthority<'info>>
-{
-    fn from(accounts: &mut NewChallenge<'info>) -> Self {
-        let cpi_accounts = SetAuthority {
-            account_or_mint: accounts
-                .initiator_tokens_source
-                .to_account_info()
-                .clone(),
-            current_authority: accounts.initiator.to_account_info().clone(),
-        };
-        let cpi_program = accounts.token_program.to_account_info();
-        CpiContext::new(cpi_program, cpi_accounts)
-    }
+    // account to transfer acceptor's wager tokens to
+    #[account(
+        init,
+        payer = acceptor,
+        seeds = [b"acceptor_tokens_vault".as_ref(), acceptor.to_account_info().key.as_ref()],
+        bump,
+        token::mint=acceptor_tokens_mint,
+        token::authority=challenge,
+    )]
+    acceptor_tokens_vault: Account<'info, TokenAccount>,
+
+    // Mint of the wager that the person accepting the challenge is putting up
+    pub acceptor_tokens_mint: Account<'info, Mint>,
+
+    // Where to withdraw the acceptor's wager tokens from
+    #[account(mut)]
+    pub acceptor_tokens_source: Account<'info, TokenAccount>,
+    
+    // Application level accounts
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 // #[error]
