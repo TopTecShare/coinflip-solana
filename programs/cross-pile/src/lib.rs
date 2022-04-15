@@ -27,6 +27,24 @@ pub mod cross_pile {
 
         let initiator_tokens_vault = &mut ctx.accounts.initiator_tokens_vault;
 
+        anchor_spl::token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::Transfer {
+                    from: ctx
+                        .accounts
+                        .initiator_tokens_source
+                        .to_account_info(),
+                    to: ctx
+                        .accounts
+                        .initiator_tokens_vault
+                        .to_account_info(),
+                    authority: ctx.accounts.initiator.to_account_info(),
+                },
+            ),
+            initiator_wager_token_amount,
+        )?;
+
         // I don't fully understand this whole inner/outer nonsense to get the signer seeds to be arranged correctly
         // let bump_vector = challenge_bump.to_le_bytes();
         // let inner = vec![
@@ -52,16 +70,16 @@ pub mod cross_pile {
         // This pattern is common in Rust.
         // anchor_spl::token::transfer(cpi_ctx, initiator_wager_token_amount)?;
 
-        let (pda, _bump_seed) = Pubkey::find_program_address(&[ESCROW_PDA_SEED], ctx.program_id);
-        let seeds = &[&ESCROW_PDA_SEED[..], &[bump_seed]];
-        token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
+        // let (pda, _bump_seed) = Pubkey::find_program_address(&[ESCROW_PDA_SEED], ctx.program_id);
+        // let seeds = &[&ESCROW_PDA_SEED[..], &[_bump_seed]];
+        // token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
 
-        token::transfer(
-            ctx.accounts
-                .into_transfer_to_taker_context()
-                .with_signer(&[&seeds[..]]),
-                initiator_wager_token_amount,
-        )?;
+        // token::transfer(
+        //     ctx.accounts
+        //         .into_transfer_to_taker_context()
+        //         .with_signer(&[&seeds[..]]),
+        //         initiator_wager_token_amount,
+        // )?;
 
         Ok(())
     }
@@ -152,18 +170,6 @@ impl<'info> From<&mut NewChallenge<'info>>
             current_authority: accounts.initiator.to_account_info().clone(),
         };
         let cpi_program = accounts.token_program.to_account_info();
-        CpiContext::new(cpi_program, cpi_accounts)
-    }
-}
-
-impl<'info> NewChallenge<'info> {
-    fn into_transfer_to_taker_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
-        let cpi_accounts = Transfer {
-            from: self.pda_deposit_token_account.to_account_info().clone(),
-            to: self.taker_receive_token_account.to_account_info().clone(),
-            authority: self.pda_account.clone(),
-        };
-        let cpi_program = self.token_program.to_account_info();
         CpiContext::new(cpi_program, cpi_accounts)
     }
 }

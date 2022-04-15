@@ -110,59 +110,57 @@ export class Initiator {
         //     'finalized'
         // );
 
-        let [_, amount] = await readAccount(this.initiatorTokensSource.address, this.session.provider);
+        let [_, amount] = await readTokenAccount(this.initiatorTokensSource.address, this.session.provider);
         console.log(`Initiator tokens source (${this.initiatorTokensSource.address.toString()} created, and has ${amount} tokens)`);
-        console.log('-------------------------------------');
         console.table([
             {address: "challenge: " + this.challengeAddress, bump: "challenge: " + this.challengeBump},
             {address: "initiator tokens vault: " + this.initiatorTokensVaultAddress, bump: "initiator tokens vault: " + this.initiatorTokensVaultBump}
         ])
-        console.log('-------------------------------------');
+    }
+
+    async newChallenge(amount: BN): Promise<string> {
+        setProvider(this.session.provider);
+
+        return await this.session.program.methods.newChallenge(
+            this.challengeBump,
+            this.initiatorTokensVaultBump,
+            amount
+            )
+            .accounts({
+                challenge: this.challengeAddress,
+                initiatorTokensVault: this.initiatorTokensVaultAddress,
+                initiatorTokensMint: this.tokensMintPublickey,
+                initiator: this.session.userKeypair.publicKey,
+                initiatorTokensSource: this.initiatorTokensSource.address,
+                systemProgram: web3.SystemProgram.programId,
+                rent: web3.SYSVAR_RENT_PUBKEY,
+                tokenProgram: spl.TOKEN_PROGRAM_ID,
+            })
+            .rpc();
     }
 
     // async newChallenge(amount: BN) {
     //     setProvider(this.session.provider);
-
-    //     return await this.session.program.methods.newChallenge(
+        
+    //     console.log("" + this.challengeBump + "" + this.initiatorTokensVaultBump);
+    //     await this.session.program.rpc.newChallenge(
     //         this.challengeBump,
     //         this.initiatorTokensVaultBump,
-    //         amount
-    //         )
-    //         .accounts({
-    //             challenge: this.challengeAddress,
-    //             initiatorTokensVault: this.initiatorTokensVaultAddress,
-    //             initiatorTokensMint: this.tokensMintPublickey,
-    //             initiator: this.session.userKeypair.publicKey,
-    //             initiatorTokensSource: this.initiatorTokensSource.address,
-    //             systemProgram: web3.SystemProgram.programId,
-    //             rent: web3.SYSVAR_RENT_PUBKEY,
-    //             tokenProgram: spl.TOKEN_PROGRAM_ID,
-    //         })
-    //         .rpc();
+    //         amount, 
+    //         {
+    //             accounts: {
+    //                 challenge: this.challengeAddress,
+    //                 initiatorTokensVault: this.initiatorTokensVaultAddress,
+    //                 initiatorTokensMint: this.tokensMintPublickey,
+    //                 initiator: this.session.userKeypair.publicKey,
+    //                 initiatorTokensSource: this.initiatorTokensSource.address,
+    //                 systemProgram: web3.SystemProgram.programId,
+    //                 rent: web3.SYSVAR_RENT_PUBKEY,
+    //                 tokenProgram: spl.TOKEN_PROGRAM_ID,
+    //             }
+    //         }
+    //     );
     // }
-
-    async newChallenge(amount: BN) {
-        setProvider(this.session.provider);
-        
-        console.log("" + this.challengeBump + "" + this.initiatorTokensVaultBump);
-        await this.session.program.rpc.newChallenge(
-            this.challengeBump,
-            this.initiatorTokensVaultBump,
-            amount, 
-            {
-                accounts: {
-                    challenge: this.challengeAddress,
-                    initiatorTokensVault: this.initiatorTokensVaultAddress,
-                    initiatorTokensMint: this.tokensMintPublickey,
-                    initiator: this.session.userKeypair.publicKey,
-                    initiatorTokensSource: this.initiatorTokensSource.address,
-                    systemProgram: web3.SystemProgram.programId,
-                    rent: web3.SYSVAR_RENT_PUBKEY,
-                    tokenProgram: spl.TOKEN_PROGRAM_ID,
-                }
-            }
-        );
-    }
  }
 
 export class Acceptor {
@@ -190,7 +188,7 @@ export class Acceptor {
     }
 }
 
-export const readAccount = async (accountPublicKey: web3.PublicKey, provider: Provider): Promise<[spl.RawAccount, string]> => {
+export const readTokenAccount = async (accountPublicKey: web3.PublicKey, provider: Provider): Promise<[spl.RawAccount, string]> => {
     const tokenInfoLol = await provider.connection.getAccountInfo(accountPublicKey);
     const data = Buffer.from(tokenInfoLol.data);
     const accountInfo: spl.RawAccount = spl.AccountLayout.decode(data);

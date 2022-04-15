@@ -1,7 +1,8 @@
 import * as anchor from '@project-serum/anchor';
 import { Program } from '@project-serum/anchor';
 import { CrossPile } from '../target/types/cross_pile';
-import { Session, Initiator, Acceptor, readAccount } from "../app/sessions";
+import { Session, Initiator, Acceptor, readTokenAccount } from "../app/sessions";
+import * as spl from '@solana/spl-token';
 import { expect } from 'chai';
 
 describe('cross-pile', () => {
@@ -31,11 +32,23 @@ describe('cross-pile', () => {
 
             await initiator.setUp(initialTokenFundAmount);
 
-            await initiator.newChallenge(wagerTokensAmountBigNumber);
+            let newChallengeTx = await initiator.newChallenge(wagerTokensAmountBigNumber);
+            await initiatorSession.provider.connection.confirmTransaction(
+                newChallengeTx, 'finalized'
+            );
     
             let challengeData = await program.account.challenge.fetch(initiator.challengeAddress);
-            let [, tokenSourceAmount] = await readAccount(initiator.initiatorTokensSource.address, initiatorSession.provider);
+            let [, tokenSourceAmount] = await readTokenAccount(initiator.initiatorTokensSource.address, initiatorSession.provider);
             console.log(`tokenSource: ${initiator.initiatorTokensSource.address} now has ${tokenSourceAmount} tokens.`);
+
+            const mintInfo = await spl.getMint(
+                initiatorSession.provider.connection,
+                initiator.tokensMintPublickey
+            );
+            const initiatorTokensVaultAccount = await spl.getAccount(
+                initiatorSession.provider.connection,
+                initiator.initiatorTokensVaultAddress
+            );
 
             expect(challengeData.initiator.toString(), "New challenge is owned by instantiating user.")
                 .equals(initiatorSession.userKeypair.publicKey.toString());
@@ -49,8 +62,8 @@ describe('cross-pile', () => {
                 .equals(initiator.initiatorTokensVaultAddress.toString());
             expect(tokenSourceAmount)
                 .equals(`${initialTokenFundAmount - wagerTokensAmount}`);
-            // expect(initiatorTokenVaultAmount)
-            //     .equals(wagerTokensAmount.toString());
+            expect(Number(initiatorTokensVaultAccount.amount))
+                .equals(wagerTokensAmount);
         });
     });
 
