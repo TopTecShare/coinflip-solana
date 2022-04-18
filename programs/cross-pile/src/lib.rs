@@ -82,7 +82,71 @@ pub mod cross_pile {
 
         Ok(())
     }
+
+    pub fn reveal_winner(
+        ctx: Context<RevealWinner>,
+        initiator_tokens_vault_bump: u8,
+    ) -> Result<()> {
+        msg!("here");
+        let initiatorVaultSeeds = &[
+            b"initiator_tokens_vault".as_ref(),
+            ctx.accounts.challenge.initiator.as_ref(),
+            &[initiator_tokens_vault_bump],
+        ];
+        let challengeSeeds = &[
+            b"challenge",
+            ctx.accounts.challenge.initiator.as_ref(),
+            &[ctx.accounts.challenge.bump]
+        ];
+        anchor_spl::token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::Transfer {
+                    from: ctx
+                        .accounts
+                        .initiator_tokens_vault
+                        .to_account_info(),
+                    to: ctx
+                        .accounts
+                        .acceptor_other_tokens_taker
+                        .to_account_info(),
+                    authority: ctx
+                        .accounts
+                        .challenge
+                        .to_account_info(),
+                },
+                &[&challengeSeeds[..]],
+            ),
+            ctx.accounts.challenge.initiator_wager_token_amount,
+        )?;
+
+        Ok(())
+    }
 }
+
+#[derive(Accounts)]
+pub struct RevealWinner<'info> {
+    #[account(mut)]
+    pub challenge: Account<'info, Challenge>,
+
+    #[account(mut)]
+    initiator_tokens_vault: Account<'info, TokenAccount>,
+    #[account(mut)]
+    acceptor_tokens_vault: Account<'info, TokenAccount>,
+
+    // accounts to receive the bet back into
+    // account to receive acceptor's own bet back into
+    #[account(mut)]
+    acceptor_own_tokens_taker: Account<'info, TokenAccount>,
+    // account to receive initiator's bet into
+    #[account(mut)]
+    acceptor_other_tokens_taker: Account<'info, TokenAccount>,
+
+    // Application level accounts
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+}
+
 
 // PDA that holds the state of the challenge
 #[account]

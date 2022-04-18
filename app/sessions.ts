@@ -84,7 +84,6 @@ export class Initiator {
             null, // don't need a freeze authority for the example mint
             9, // decimal places 9 TODO
             web3.Keypair.generate(),
-            {commitment: 'finalized'}
             );
         
         console.log(`Initiator mint created (${this.tokensMintPublickey.toString()})`);
@@ -144,10 +143,12 @@ export class Acceptor {
     session: Session;
     acceptorTokensVaultAddress: PublicKey;
     acceptorTokensVaultBump: any; // u8
-    initiatorTokensVaultSeed: string = "acceptor_tokens_vault";
+    acceptorTokensVaultSeed: string = "acceptor_tokens_vault";
     mintAuthority: Keypair;
     tokensMintPublickey: PublicKey;
     acceptorTokensSource: spl.Account;
+    acceptorOwnTokensTaker: spl.Account;
+    acceptorOtherTokensTaker: spl.Account;
 
     constructor(session: Session) {
         this.session = session;
@@ -157,7 +158,7 @@ export class Acceptor {
         setProvider(this.session.provider);
 
         [this.acceptorTokensVaultAddress, this.acceptorTokensVaultBump] = await web3.PublicKey.findProgramAddress(
-            [Buffer.from(this.initiatorTokensVaultSeed), this.session.userKeypair.publicKey.toBuffer()],
+            [Buffer.from(this.acceptorTokensVaultSeed), this.session.userKeypair.publicKey.toBuffer()],
             this.session.programId,
         );
 
@@ -173,7 +174,6 @@ export class Acceptor {
             null, // don't need a freeze authority for the example mint
             9, // decimal places 9 TODO
             web3.Keypair.generate(),
-            {commitment: 'finalized'}
             );
         
         console.log(`Initiator mint created (${this.tokensMintPublickey.toString()})`);
@@ -220,7 +220,43 @@ export class Acceptor {
         })
         .rpc();
     }
+
+    async revealWinner(challengeAddress, initiatorTokensVault, initiatorTokensMintPublicKey, initiatorTokensVaultBump): Promise<string>
+    {
+        setProvider(this.session.provider);
+
+
+        this.acceptorOwnTokensTaker = await spl.getOrCreateAssociatedTokenAccount(
+            this.session.provider.connection,
+            this.session.userKeypair,
+            this.tokensMintPublickey,
+            this.session.userKeypair.publicKey,
+        );
+
+        this.acceptorOtherTokensTaker = await spl.getOrCreateAssociatedTokenAccount(
+            this.session.provider.connection,
+            this.session.userKeypair,
+            initiatorTokensMintPublicKey,
+            this.session.userKeypair.publicKey,
+        );
+
+        return await this.session.program.methods.revealWinner(
+            initiatorTokensVaultBump
+        )
+        .accounts({
+            challenge: challengeAddress,
+            initiatorTokensVault: initiatorTokensVault,
+            acceptorTokensVault: this.acceptorTokensVaultAddress,
+            acceptorOwnTokensTaker: this.acceptorOwnTokensTaker.address,
+            acceptorOtherTokensTaker: this.acceptorOtherTokensTaker.address,
+            systemProgram: web3.SystemProgram.programId,
+            tokenProgram: spl.TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+    }
 }
+
+// export const createMint = async ()
 
 export const readTokenAccount = async (accountPublicKey: web3.PublicKey, provider: Provider): Promise<[spl.RawAccount, string]> => {
     const tokenInfoLol = await provider.connection.getAccountInfo(accountPublicKey);
