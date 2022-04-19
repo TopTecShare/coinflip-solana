@@ -240,9 +240,7 @@ export class Acceptor {
             this.session.userKeypair.publicKey,
         );
 
-        return await this.session.program.methods.revealWinner(
-            initiatorTokensVaultBump
-        )
+        return await this.session.program.methods.revealWinner()
         .accounts({
             challenge: challengeAddress,
             initiatorTokensVault: initiatorTokensVault,

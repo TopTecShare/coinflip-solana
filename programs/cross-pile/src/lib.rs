@@ -85,14 +85,9 @@ pub mod cross_pile {
 
     pub fn reveal_winner(
         ctx: Context<RevealWinner>,
-        initiator_tokens_vault_bump: u8,
     ) -> Result<()> {
-        msg!("here");
-        let initiatorVaultSeeds = &[
-            b"initiator_tokens_vault".as_ref(),
-            ctx.accounts.challenge.initiator.as_ref(),
-            &[initiator_tokens_vault_bump],
-        ];
+        // transfer initiator tokens vault to acceptor other tokens taker account
+        // ie the acceptor is receiving the initiator's bet
         let challengeSeeds = &[
             b"challenge",
             ctx.accounts.challenge.initiator.as_ref(),
@@ -120,6 +115,47 @@ pub mod cross_pile {
             ctx.accounts.challenge.initiator_wager_token_amount,
         )?;
 
+        // transfer acceptor tokens vault to acceptor own tokens taker account
+        // ie the acceptor is receiving his own bet
+        anchor_spl::token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token::Transfer {
+                    from: ctx
+                        .accounts
+                        .acceptor_tokens_vault
+                        .to_account_info(),
+                    to: ctx
+                        .accounts
+                        .acceptor_own_tokens_taker
+                        .to_account_info(),
+                    authority: ctx
+                        .accounts
+                        .challenge
+                        .to_account_info(),
+                },
+                &[&challengeSeeds[..]],
+            ),
+            ctx.accounts.challenge.acceptor_wager_token_amount,
+        )?;
+
+        // Close the escrow account
+        anchor_spl::token::close_account(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token::CloseAccount {
+                account: ctx
+                    .accounts
+                    .initiator_tokens_vault
+                    .to_account_info(),
+                destination: ctx.accounts.initiator.to_account_info(),
+                authority: ctx
+                    .accounts
+                    .initiator_tokens_vault
+                    .to_account_info(),
+            },
+            &[&challengeSeeds[..]],
+        ))?;
+
         Ok(())
     }
 }
@@ -129,10 +165,17 @@ pub struct RevealWinner<'info> {
     #[account(mut)]
     pub challenge: Account<'info, Challenge>,
 
+    /// CHECK: TODO
     #[account(mut)]
-    initiator_tokens_vault: Account<'info, TokenAccount>,
+    pub initiator: AccountInfo<'info>,
+    /// CHECK: TODO
     #[account(mut)]
-    acceptor_tokens_vault: Account<'info, TokenAccount>,
+    pub acceptor: AccountInfo<'info>,
+
+    #[account(mut)]
+    initiator_tokens_vault: Box<Account<'info, TokenAccount>>,
+    #[account(mut)]
+    acceptor_tokens_vault: Box<Account<'info, TokenAccount>>,
 
     // accounts to receive the bet back into
     // account to receive acceptor's own bet back into
